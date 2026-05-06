@@ -1,0 +1,463 @@
+{
+  "name": "Content Battle System",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-battle",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-input",
+      "name": "Input Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 400],
+      "webhookId": "content-battle-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "field-tema", "name": "tema", "value": "={{ $json.body.tema }}", "type": "string" },
+            { "id": "field-objetivo", "name": "objetivo", "value": "={{ $json.body.objetivo }}", "type": "string" },
+            { "id": "field-publico", "name": "publico", "value": "={{ $json.body.publico }}", "type": "string" },
+            { "id": "field-formato", "name": "formato", "value": "={{ $json.body.formato }}", "type": "string" },
+            { "id": "field-canal", "name": "canal", "value": "={{ $json.body.canal }}", "type": "string" },
+            { "id": "field-tom", "name": "tom", "value": "={{ $json.body.tom ?? 'natural e direto' }}", "type": "string" },
+            { "id": "field-posts", "name": "posts_anteriores", "value": "={{ $json.body.posts_anteriores ?? [] }}", "type": "array" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-input",
+      "name": "Preparar Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Tema: ' + $json.tema + '\\nObjetivo: ' + $json.objetivo + '\\nPúblico: ' + $json.publico + '\\nCanal: ' + $json.canal + '\\nPosts anteriores: ' + JSON.stringify($json.posts_anteriores) }}",
+        "options": {
+          "systemMessage": "Você é um analista de performance de conteúdo digital.\n\nReceba as informações sobre o tema, objetivo, canal e histórico de posts anteriores.\n\nSua missão: identificar os TOP 3 padrões que mais geraram resultado para este objetivo e canal.\n\nAnalise:\n- Quais hooks performaram melhor (mais abertura/cliques)\n- Quais formatos converteram mais\n- Qual tom e estilo engajou mais o público\n- O que NUNCA funcionou (evitar)\n\nSe não houver histórico, retorne insights gerais baseados em boas práticas para o objetivo e canal informados.\n\nRetorne em formato estruturado:\nPADRÃO 1: [título]\n- O que funcionou: ...\n- Por quê: ...\n\nPADRÃO 2: [título]\n- O que funcionou: ...\n- Por quê: ...\n\nPADRÃO 3: [título]\n- O que funcionou: ...\n- Por quê: ...\n\nO QUE EVITAR:\n- ...",
+          "maxIterations": 5
+        }
+      },
+      "id": "node-memory-agent",
+      "name": "Memory Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1024
+        }
+      },
+      "id": "node-memory-model",
+      "name": "Memory Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [680, 560]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "field-mc", "name": "memory_context", "value": "={{ $json.output }}", "type": "string" },
+            { "id": "field-tema2", "name": "tema", "value": "={{ $('Preparar Input').item.json.tema }}", "type": "string" },
+            { "id": "field-obj2", "name": "objetivo", "value": "={{ $('Preparar Input').item.json.objetivo }}", "type": "string" },
+            { "id": "field-pub2", "name": "publico", "value": "={{ $('Preparar Input').item.json.publico }}", "type": "string" },
+            { "id": "field-fmt2", "name": "formato", "value": "={{ $('Preparar Input').item.json.formato }}", "type": "string" },
+            { "id": "field-can2", "name": "canal", "value": "={{ $('Preparar Input').item.json.canal }}", "type": "string" },
+            { "id": "field-tom2", "name": "tom", "value": "={{ $('Preparar Input').item.json.tom }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-memory",
+      "name": "Consolidar com Memória",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Tema: ' + $json.tema + '\\nObjetivo: ' + $json.objetivo + '\\nFormato: ' + $json.formato + '\\nCanal: ' + $json.canal + '\\nPúblico: ' + $json.publico + '\\nTom: ' + $json.tom + '\\n\\nCONTEXTO DE PERFORMANCE (aprenda com isso):\\n' + $json.memory_context }}",
+        "options": {
+          "systemMessage": "Você é um criador de conteúdo especialista em conteúdo digital de alta performance.\n\nSua missão: criar um rascunho inicial poderoso do conteúdo solicitado.\n\nRegras absolutas:\n1. O HOOK é sagrado — deve parar o scroll nos primeiros 3 segundos/linhas. Internamente teste 2 opções e escolha a mais forte.\n2. Use a estrutura ideal para o objetivo:\n   - Engajamento: Curiosidade → Desenvolvimento → Virada → Reflexão\n   - Venda: Dor específica → Agitação → Solução → Prova → CTA\n   - Autoridade: Dado surpreendente → Insight contraintuitivo → Método → Aplicação\n3. NUNCA seja genérico. Seja específico, concreto, com exemplos reais.\n4. Adapte o tom e formato ao canal informado.\n5. Use o contexto de performance para evitar o que não funciona e replicar o que funciona.\n\nEntregue APENAS o conteúdo final, sem explicações ou comentários.\nNão inclua título como 'Versão 1' ou similar — só o conteúdo puro.",
+          "maxIterations": 5
+        }
+      },
+      "id": "node-creator-agent",
+      "name": "Creator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 2048
+        }
+      },
+      "id": "node-creator-model",
+      "name": "Creator Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [1120, 560]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "field-cv1", "name": "conteudo_v1", "value": "={{ $json.output }}", "type": "string" },
+            { "id": "field-tema3", "name": "tema", "value": "={{ $('Consolidar com Memória').item.json.tema }}", "type": "string" },
+            { "id": "field-obj3", "name": "objetivo", "value": "={{ $('Consolidar com Memória').item.json.objetivo }}", "type": "string" },
+            { "id": "field-pub3", "name": "publico", "value": "={{ $('Consolidar com Memória').item.json.publico }}", "type": "string" },
+            { "id": "field-fmt3", "name": "formato", "value": "={{ $('Consolidar com Memória').item.json.formato }}", "type": "string" },
+            { "id": "field-can3", "name": "canal", "value": "={{ $('Consolidar com Memória').item.json.canal }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-v1",
+      "name": "Salvar V1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'CONTEÚDO PARA ANÁLISE:\\n\\n' + $json.conteudo_v1 }}",
+        "options": {
+          "systemMessage": "Você é um editor brutalmente criterioso. Não tem ego, só tem resultado.\n\nAnalise o conteúdo recebido e aponte APENAS os problemas reais, sem elogios desnecessários.\n\nAvalie obrigatoriamente estes 3 pilares:\n\n1. EXCESSO E GORDURA:\n- Cite as frases/parágrafos exatos que podem ser cortados sem perder sentido\n- Identifique repetições\n- Aponte onde o texto enrola antes de chegar no ponto\n\n2. CLAREZA E PRECISÃO:\n- Quais frases são vagas ou ambíguas? (cite-as literalmente)\n- Onde o leitor pode se perder?\n- Jargões desnecessários?\n\n3. ESTRUTURA E LÓGICA:\n- O conteúdo tem progressão lógica clara?\n- A transição entre partes funciona?\n- O fim entrega o que o começo prometeu?\n\nFormato obrigatório:\nEXCESSO: [sua análise]\nCLAREZA: [sua análise]\nESTRUTURA: [sua análise]\nPRIORIDADE MÁXIMA: [a única coisa mais urgente a corrigir]",
+          "maxIterations": 3
+        }
+      },
+      "id": "node-editor-agent",
+      "name": "Editor Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "model": "claude-haiku-4-5-20251001",
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1024
+        }
+      },
+      "id": "node-editor-model",
+      "name": "Editor Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [1560, 360]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'CANAL: ' + $json.canal + '\\nOBJETIVO: ' + $json.objetivo + '\\n\\nCONTEÚDO PARA ANÁLISE:\\n\\n' + $json.conteudo_v1 }}",
+        "options": {
+          "systemMessage": "Você é um especialista em growth de conteúdo e psicologia da atenção.\n\nSua missão: diagnosticar por que este conteúdo vai ou não vai performar.\n\nAvalie os 3 pilares com notas (0-10) e diagnóstico:\n\n1. HOOK (primeiros 3 segundos / primeiras linhas):\n- Nota: X/10\n- Ele para o scroll? Por que sim ou por que não?\n- O que especificamente está matando o hook?\n- Sugestão de direção (não reescreva, só aponte o caminho)\n\n2. RETENÇÃO (estrutura que segura até o fim):\n- Nota: X/10\n- Em qual ponto exato o leitor vai embora? (cite o trecho)\n- A progressão de valor está clara?\n- O que falta para manter até o CTA?\n\n3. CTA (chamada para ação):\n- Nota: X/10\n- Está claro o que o leitor deve fazer?\n- A urgência ou motivação está presente?\n- Está no lugar certo no conteúdo?\n\nFormato obrigatório:\nHOOK: [nota] - [diagnóstico]\nRETENÇÃO: [nota] - [diagnóstico]\nCTA: [nota] - [diagnóstico]\nSCORE GERAL GROWTH: [média]/10\nO QUE SALVAR: [o que está funcionando]\nO QUE MATAR: [o que está destruindo a performance]",
+          "maxIterations": 3
+        }
+      },
+      "id": "node-growth-agent",
+      "name": "Growth Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1560, 420]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "temperature": 0.5,
+          "maxTokens": 1024
+        }
+      },
+      "id": "node-growth-model",
+      "name": "Growth Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [1560, 580]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'CANAL: ' + $json.canal + '\\nPÚBLICO-ALVO: ' + $json.publico + '\\n\\nCONTEÚDO PARA JULGAMENTO:\\n\\n' + $json.conteudo_v1 }}",
+        "options": {
+          "systemMessage": "Você é o julgamento mais brutal e honesto da internet. Pense como alguém que passa 3 horas por dia no feed, viu tudo, e tem zero paciência para conteúdo mediano.\n\nSeu trabalho é salvar o criador de publicar algo que vai ser ignorado.\n\nJulgue sem filtro, sem diplomacia, sem piedade:\n\n1. VEREDITO INICIAL (1 frase): Se você visse isso no feed agora, pararia ou rolaria?\n\n2. O QUE ESTÁ MATANDO ESTE CONTEÚDO:\n- É genérico? Já vi isso mil vezes de formas melhores?\n- Ninguém liga pra isso realmente?\n- Está tentando parecer profundo mas é vazio?\n- O hook é clichê ou fraco?\n- Tem ego demais e valor de menos?\n\n3. O QUE (SE ALGO) SALVA:\n- Tem alguma ideia, frase ou dado que é genuinamente bom?\n- Tem potencial real ou é missão impossível?\n\n4. SENTENÇA FINAL:\n- Em uma palavra, como você descreveria este conteúdo?\n- Nota brutal: X/10\n\nLembre: se for bom de verdade, diga. Mas se for mediano, destrua. A honestidade aqui salva o creator de constrangimento público.",
+          "maxIterations": 3
+        }
+      },
+      "id": "node-hater-agent",
+      "name": "Hater Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1560, 640]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "temperature": 0.9,
+          "maxTokens": 1024
+        }
+      },
+      "id": "node-hater-model",
+      "name": "Hater Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [1560, 800]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'CANAL: ' + $json.canal + '\\nOBJETIVO: ' + $json.objetivo + '\\nPÚBLICO: ' + $json.publico + '\\n\\nCONTEÚDO PARA TESTE DE AUDIÊNCIA:\\n\\n' + $json.conteudo_v1 }}",
+        "options": {
+          "systemMessage": "Você vai simular 3 reações reais de audiência para este conteúdo. Cada persona é distinta e honesta.\n\nPERSONA 1 — USUÁRIO COMUM (scrollando distraído):\n- Contexto: encontrou este conteúdo no feed sem procurar, sem contexto prévio\n- Pensamento em voz alta enquanto lê linha por linha\n- O que chamou atenção? O que confundiu? Em qual ponto saiu?\n- Resultado: parou e leu até o fim? Curtiu? Comentou? Ou foi embora?\n\nPERSONA 2 — CLIENTE POTENCIAL (considerando comprar/contratar):\n- Contexto: está avaliando se o criador/marca tem autoridade e credibilidade\n- Este conteúdo gera confiança ou levanta dúvidas?\n- Quais objeções surgem durante a leitura?\n- Resultado: avançou na jornada ou ficou na dúvida?\n\nPERSONA 3 — CRÍTICO EXIGENTE (alta expectativa, baixa tolerância):\n- Contexto: consome muito conteúdo de qualidade, detecta superficialidade rápido\n- O que neste conteúdo é superficial ou raso?\n- O que provaria que o criador realmente domina o assunto?\n- Resultado: ganhou respeito ou perdeu?\n\nFormato:\nUSUÁRIO COMUM: [reação detalhada]\nCLIENTE POTENCIAL: [reação detalhada]\nCRÍTICO EXIGENTE: [reação detalhada]\nCONSENSO DA AUDIÊNCIA: [o que as 3 perspectivas concordam que precisa mudar]",
+          "maxIterations": 3
+        }
+      },
+      "id": "node-audience-agent",
+      "name": "Audience Simulator",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1560, 860]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "temperature": 0.8,
+          "maxTokens": 1024
+        }
+      },
+      "id": "node-audience-model",
+      "name": "Audience Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [1560, 1020]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "node-merge",
+      "name": "Consolidar Críticas",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1800, 520]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-all",
+              "name": "todas_criticas",
+              "value": "={{ 'CONTEÚDO ORIGINAL (V1):\\n' + $('Salvar V1').item.json.conteudo_v1 + '\\n\\n---\\nCRÍTICA DO EDITOR:\\n' + $('Editor Agent').item.json.output + '\\n\\n---\\nCRÍTICA DO GROWTH AGENT:\\n' + $('Growth Agent').item.json.output + '\\n\\n---\\nCRÍTICA DO HATER AGENT:\\n' + $('Hater Agent').item.json.output + '\\n\\n---\\nREAÇÕES DA AUDIÊNCIA SIMULADA:\\n' + $('Audience Simulator').item.json.output }}",
+              "type": "string"
+            },
+            { "id": "field-cv1b", "name": "conteudo_v1", "value": "={{ $('Salvar V1').item.json.conteudo_v1 }}", "type": "string" },
+            { "id": "field-tema4", "name": "tema", "value": "={{ $('Salvar V1').item.json.tema }}", "type": "string" },
+            { "id": "field-obj4", "name": "objetivo", "value": "={{ $('Salvar V1').item.json.objetivo }}", "type": "string" },
+            { "id": "field-pub4", "name": "publico", "value": "={{ $('Salvar V1').item.json.publico }}", "type": "string" },
+            { "id": "field-can4", "name": "canal", "value": "={{ $('Salvar V1').item.json.canal }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-criticas",
+      "name": "Preparar para Refiner",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2020, 520]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.todas_criticas }}",
+        "options": {
+          "systemMessage": "Você é o editor-chefe responsável pelo conteúdo final publicável. Você recebeu o rascunho original e 4 perspectivas críticas completas.\n\nSua missão é reescrever o conteúdo incorporando TODAS as críticas válidas e entregando a versão definitiva.\n\nProcesso obrigatório:\n1. Leia todas as críticas e identifique os consensos (o que todos apontaram)\n2. Identifique os problemas críticos vs. os secundários\n3. Reescreva do zero se necessário — não tenha apego ao rascunho\n4. Mantenha a voz e personalidade do criador original\n5. O resultado deve ser publicável hoje, sem revisão adicional\n\nRegras de ouro:\n- O hook deve ser irresistível — se o original estava fraco, mude completamente\n- Corte todo excesso identificado pelo Editor\n- Fortaleça o CTA conforme sugestão do Growth\n- Elimine tudo que o Hater apontou como genérico\n- Incorpore o feedback da audiência simulada\n\nFormato de entrega OBRIGATÓRIO (use exatamente estas marcações):\n\n===CONTEÚDO FINAL===\n[Conteúdo completo e publicável aqui]\n===FIM DO CONTEÚDO===\n\n===MELHORIAS APLICADAS===\n1. [Melhoria específica e por que foi feita]\n2. [Melhoria específica e por que foi feita]\n3. [Melhoria específica e por que foi feita]\n4. [Melhoria específica e por que foi feita]\n5. [Melhoria específica e por que foi feita]\n===FIM DAS MELHORIAS===\n\n===SCORES===\nClareza: X/10\nImpacto: X/10\nOriginalidade: X/10\nHook: X/10\nConversão: X/10\nScore médio v1 (estimado): X/10\nScore médio final: X/10\n===FIM DOS SCORES===",
+          "maxIterations": 5
+        }
+      },
+      "id": "node-refiner-agent",
+      "name": "Refiner Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [2240, 520]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "temperature": 0.6,
+          "maxTokens": 4096
+        }
+      },
+      "id": "node-refiner-model",
+      "name": "Refiner Model",
+      "type": "@n8n/n8n-nodes-langchain.lmAnthropicChatModel",
+      "typeVersion": 1.3,
+      "position": [2240, 680]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output || '';\n\n// Extrair conteúdo final\nconst conteudoMatch = raw.match(/===CONTEÚDO FINAL===([\\s\\S]*?)===FIM DO CONTEÚDO===/i);\nconst conteudo_final = conteudoMatch ? conteudoMatch[1].trim() : raw;\n\n// Extrair melhorias\nconst melhorasMatch = raw.match(/===MELHORIAS APLICADAS===([\\s\\S]*?)===FIM DAS MELHORIAS===/i);\nconst melhorias_raw = melhorasMatch ? melhorasMatch[1].trim() : '';\nconst melhorias = melhorias_raw.split('\\n').filter(l => l.match(/^\\d+\\./)).map(l => l.replace(/^\\d+\\.\\s*/, '').trim());\n\n// Extrair scores\nconst scoresMatch = raw.match(/===SCORES===([\\s\\S]*?)===FIM DOS SCORES===/i);\nconst scores_raw = scoresMatch ? scoresMatch[1].trim() : '';\n\nconst extractScore = (label) => {\n  const m = scores_raw.match(new RegExp(label + '[:\\\\s]+(\\\\d+(?:\\\\.\\\\d+)?)\\/10', 'i'));\n  return m ? parseFloat(m[1]) : null;\n};\n\nconst scores = {\n  clareza: extractScore('Clareza'),\n  impacto: extractScore('Impacto'),\n  originalidade: extractScore('Originalidade'),\n  hook: extractScore('Hook'),\n  conversao: extractScore('Convers'),\n  score_v1: extractScore('Score médio v1'),\n  score_final: extractScore('Score médio final')\n};\n\nconst score_medio = (() => {\n  const vals = [scores.clareza, scores.impacto, scores.originalidade, scores.hook, scores.conversao].filter(Boolean);\n  return vals.length ? Math.round((vals.reduce((a,b) => a+b, 0) / vals.length) * 10) / 10 : null;\n})();\n\nconst ganho = scores.score_v1 && scores.score_final ? Math.round((scores.score_final - scores.score_v1) * 10) / 10 : null;\n\nreturn [{\n  json: {\n    conteudo_v1: $('Salvar V1').item.json.conteudo_v1,\n    conteudo_final,\n    melhorias,\n    scores,\n    score_medio_final: score_medio,\n    ganho_percentual: ganho,\n    tema: $('Salvar V1').item.json.tema,\n    objetivo: $('Salvar V1').item.json.objetivo,\n    publico: $('Salvar V1').item.json.publico,\n    canal: $('Salvar V1').item.json.canal,\n    critica_editor: $('Editor Agent').item.json.output,\n    critica_growth: $('Growth Agent').item.json.output,\n    critica_hater: $('Hater Agent').item.json.output,\n    reacoes_audiencia: $('Audience Simulator').item.json.output,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node-parse-output",
+      "name": "Parsear Output Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2460, 520]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  sucesso: true,\n  conteudo_final: $json.conteudo_final,\n  conteudo_v1: $json.conteudo_v1,\n  melhorias_aplicadas: $json.melhorias,\n  scores: $json.scores,\n  score_medio_final: $json.score_medio_final,\n  ganho_vs_v1: $json.ganho_percentual,\n  criticas: {\n    editor: $json.critica_editor,\n    growth: $json.critica_growth,\n    hater: $json.critica_hater,\n    audiencia: $json.reacoes_audiencia\n  },\n  meta: {\n    tema: $json.tema,\n    objetivo: $json.objetivo,\n    publico: $json.publico,\n    canal: $json.canal,\n    timestamp: $json.timestamp\n  }\n}) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "node-respond",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2680, 400]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "SEU_GOOGLE_SHEET_ID_AQUI", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Histórico de Conteúdo", "mode": "name" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": ["timestamp"],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "node-sheets",
+      "name": "Salvar no Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2680, 640],
+      "notes": "Opcional — configure seu Google Sheet ID para ativar o memory loop"
+    }
+  ],
+  "connections": {
+    "Input Trigger": {
+      "main": [[{ "node": "Preparar Input", "type": "main", "index": 0 }]]
+    },
+    "Preparar Input": {
+      "main": [[{ "node": "Memory Agent", "type": "main", "index": 0 }]]
+    },
+    "Memory Agent": {
+      "main": [[{ "node": "Consolidar com Memória", "type": "main", "index": 0 }]]
+    },
+    "Memory Model": {
+      "ai_languageModel": [[{ "node": "Memory Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Consolidar com Memória": {
+      "main": [[{ "node": "Creator Agent", "type": "main", "index": 0 }]]
+    },
+    "Creator Agent": {
+      "main": [[{ "node": "Salvar V1", "type": "main", "index": 0 }]]
+    },
+    "Creator Model": {
+      "ai_languageModel": [[{ "node": "Creator Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Salvar V1": {
+      "main": [
+        [
+          { "node": "Editor Agent", "type": "main", "index": 0 },
+          { "node": "Growth Agent", "type": "main", "index": 0 },
+          { "node": "Hater Agent", "type": "main", "index": 0 },
+          { "node": "Audience Simulator", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Editor Agent": {
+      "main": [[{ "node": "Consolidar Críticas", "type": "main", "index": 0 }]]
+    },
+    "Editor Model": {
+      "ai_languageModel": [[{ "node": "Editor Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Growth Agent": {
+      "main": [[{ "node": "Consolidar Críticas", "type": "main", "index": 1 }]]
+    },
+    "Growth Model": {
+      "ai_languageModel": [[{ "node": "Growth Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Hater Agent": {
+      "main": [[{ "node": "Consolidar Críticas", "type": "main", "index": 2 }]]
+    },
+    "Hater Model": {
+      "ai_languageModel": [[{ "node": "Hater Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Audience Simulator": {
+      "main": [[{ "node": "Consolidar Críticas", "type": "main", "index": 3 }]]
+    },
+    "Audience Model": {
+      "ai_languageModel": [[{ "node": "Audience Simulator", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Consolidar Críticas": {
+      "main": [[{ "node": "Preparar para Refiner", "type": "main", "index": 0 }]]
+    },
+    "Preparar para Refiner": {
+      "main": [[{ "node": "Refiner Agent", "type": "main", "index": 0 }]]
+    },
+    "Refiner Agent": {
+      "main": [[{ "node": "Parsear Output Final", "type": "main", "index": 0 }]]
+    },
+    "Refiner Model": {
+      "ai_languageModel": [[{ "node": "Refiner Agent", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Parsear Output Final": {
+      "main": [
+        [
+          { "node": "Responder Webhook", "type": "main", "index": 0 },
+          { "node": "Salvar no Google Sheets", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "content-battle-system"
+  },
+  "tags": [
+    { "createdAt": "2026-04-02T00:00:00.000Z", "updatedAt": "2026-04-02T00:00:00.000Z", "id": "tag-ai", "name": "AI Agents" },
+    { "createdAt": "2026-04-02T00:00:00.000Z", "updatedAt": "2026-04-02T00:00:00.000Z", "id": "tag-content", "name": "Content" }
+  ],
+  "pinData": {}
+}
